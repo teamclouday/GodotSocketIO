@@ -5,7 +5,7 @@ var backendURL: String
 
 func _ready():
     # prepare URL
-    backendURL = "http://localhost:8000"
+    backendURL = "http://localhost:8000/socket.io"
 
     # initialize client
     client = SocketIOClient.new(backendURL)
