@@ -12,6 +12,8 @@ Drop `client.gd` into Godot project.
 
 See reference code in `example.gd`
 
+Be aware that by default socket.io server uses `/socket.io/` suffix in url. So for example, if `http://localhost:8000/` is normally used in client, use `http://localhost:8000/socket.io/` instead.
+
 ## References
 
 - [engine.io-protocol](https://github.com/socketio/engine.io-protocol)
