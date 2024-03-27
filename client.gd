@@ -26,6 +26,7 @@ var _sid: String
 var _pingTimeout: int = 0
 var _pingInterval: int = 0
 var _connected: bool = false
+var _auth: Dictionary = {}
 
 # triggered when engine.io connection is established
 signal on_engine_connected(sid: String)
@@ -41,8 +42,9 @@ signal on_disconnect(name_space: String)
 # triggered when socket.io event is received
 signal on_event(event_name: String, payload: Variant, name_space: String)
 
-func _init(url: String):
-	url = _preprocess_url(url)
+func _init(url: String, auth: Dictionary = {}):
+	_auth = auth
+	url = _preprocess_url(url, auth)
 	_url = "%s?EIO=4&transport=websocket" % url
 
 func _preprocess_url(url: String) -> String:
@@ -160,6 +162,8 @@ func _socketio_send_packet(type: SocketIOPacketType, name_space: String, data: V
 		payload += "%d" % ack_id
 	if data != null:
 		payload += "%s" % JSON.stringify(data)
+
+	payload += "%s" % JSON.stringify(_auth)
 
 	_engineio_send_packet(EngineIOPacketType.message, payload)
 
