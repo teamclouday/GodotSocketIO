@@ -8,7 +8,7 @@ func _ready():
     backendURL = "http://localhost:8000/socket.io"
 
     # initialize client
-    client = SocketIOClient.new(backendURL)
+    client = SocketIOClient.new(backendURL, {"token": "MY_AUTH_TOKEN"})
 
     # this signal is emitted when the socket is ready to connect
 	client.on_engine_connected.connect(on_socket_ready)
