@@ -14,6 +14,13 @@ See reference code in `example.gd`
 
 Be aware that by default socket.io server uses `/socket.io/` suffix in url. So for example, if `http://localhost:8000/` is normally used in client, use `http://localhost:8000/socket.io/` instead.
 
+## Auth Token
+
+Use `auth` parameter to send authentication token. For example:
+```gdscript
+socketio_connect("/", {"token": "MY_AUTH_TOKEN"})
+```
+
 ## References
 
 - [engine.io-protocol](https://github.com/socketio/engine.io-protocol)

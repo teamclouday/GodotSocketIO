@@ -26,6 +26,7 @@ var _sid: String
 var _pingTimeout: int = 0
 var _pingInterval: int = 0
 var _connected: bool = false
+var _auth: Variant = null
 
 # triggered when engine.io connection is established
 signal on_engine_connected(sid: String)
@@ -101,7 +102,7 @@ func _engineio_decode_packet(packet: String):
 			_socketio_parse_packet(packetPayload)
 			on_engine_message.emit(packetPayload)
 
-func _engineio_send_packet(type: EngineIOPacketType, payload: String = ""):
+func _engineio_send_packet(type: EngineIOPacketType, payload: String=""):
 	if len(payload) == 0:
 		_client.send_text("%d" % type)
 	else:
@@ -150,7 +151,7 @@ func _socketio_parse_packet(payload: String):
 			var eventData = data[1] if len(data) > 1 else null
 			on_event.emit(eventName, eventData, name_space)
 
-func _socketio_send_packet(type: SocketIOPacketType, name_space: String, data: Variant = null, binaryData: Array[PackedByteArray] = [], ack_id: Variant = null):
+func _socketio_send_packet(type: SocketIOPacketType, name_space: String, data: Variant=null, binaryData: Array[PackedByteArray]=[], ack_id: Variant=null):
 	var payload = "%d" % type
 	if binaryData.size() > 0:
 		payload += "%d-" % binaryData.size()
@@ -167,16 +168,17 @@ func _socketio_send_packet(type: SocketIOPacketType, name_space: String, data: V
 		_client.put_packet(binary)
 
 # connect to socket.io server by namespace
-func socketio_connect(name_space: String = "/"):
-	_socketio_send_packet(SocketIOPacketType.CONNECT, name_space)
+func socketio_connect(name_space: String="/", auth: Variant=null):
+	_auth = auth
+	_socketio_send_packet(SocketIOPacketType.CONNECT, name_space, auth)
 
 # disconnect from socket.io server by namespace
-func socketio_disconnect(name_space: String = "/"):
+func socketio_disconnect(name_space: String="/"):
 	_socketio_send_packet(SocketIOPacketType.DISCONNECT, name_space)
 	on_disconnect.emit(name_space)
 
 # send event to socket.io server by namespace
-func socketio_send(event_name: String, payload: Variant = null, name_space: String = "/"):
+func socketio_send(event_name: String, payload: Variant=null, name_space: String="/"):
 	if payload == null:
 		_socketio_send_packet(SocketIOPacketType.EVENT, name_space, [event_name])
 	else:
