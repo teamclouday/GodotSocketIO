@@ -42,7 +42,8 @@ signal on_disconnect(name_space: String)
 # triggered when socket.io event is received
 signal on_event(event_name: String, payload: Variant, name_space: String)
 
-func _init(url: String):
+func _init(url: String, auth: Variant=null):
+	_auth = auth
 	url = _preprocess_url(url)
 	_url = "%s?EIO=4&transport=websocket" % url
 
@@ -168,9 +169,8 @@ func _socketio_send_packet(type: SocketIOPacketType, name_space: String, data: V
 		_client.put_packet(binary)
 
 # connect to socket.io server by namespace
-func socketio_connect(name_space: String="/", auth: Variant=null):
-	_auth = auth
-	_socketio_send_packet(SocketIOPacketType.CONNECT, name_space, auth)
+func socketio_connect(name_space: String="/"):
+	_socketio_send_packet(SocketIOPacketType.CONNECT, name_space, _auth)
 
 # disconnect from socket.io server by namespace
 func socketio_disconnect(name_space: String="/"):
