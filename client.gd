@@ -26,6 +26,7 @@ var _sid: String
 var _pingTimeout: int = 0
 var _pingInterval: int = 0
 var _connected: bool = false
+var _reconnecting: bool = false
 var _auth: Variant = null
 
 # triggered when engine.io connection is established
@@ -72,11 +73,33 @@ func _process(_delta):
 			# TODO: handle binary data?
 
 	elif state == WebSocketPeer.STATE_CLOSED:
-		var code = _client.get_close_code()
-		var reason = _client.get_close_reason()
-		on_engine_disconnected.emit(code, reason)
 		_connected = false
 		set_process(false)
+
+		var code = _client.get_close_code()
+		var reason = _client.get_close_reason()
+
+		if code == -1:
+			# -1 is not-clean disconnect (i.e. Service shut down)
+			# we should try to reconnect
+			_reconnecting = true
+
+			var timer := Timer.new()
+			timer.wait_time = 1.0
+			timer.timeout.connect(_on_reconnect_timer_timeout.bind(timer))
+			timer.autostart = true
+			add_child(timer)
+		else:
+			on_engine_disconnected.emit(code, reason)
+
+func _on_reconnect_timer_timeout(timer: Timer):
+	_client.poll()
+	var state = _client.get_ready_state()
+	if state == WebSocketPeer.STATE_CLOSED:
+		_client.connect_to_url(_url)
+	else:
+		set_process(true)
+		timer.queue_free()
 
 func _exit_tree():
 	_engineio_send_packet(EngineIOPacketType.close)
@@ -142,9 +165,15 @@ func _socketio_parse_packet(payload: String):
 
 	match packetType:
 		SocketIOPacketType.CONNECT:
-			on_connect.emit(data, name_space, false)
+			if not _reconnecting:
+				on_connect.emit(data, name_space, false)
+			else:
+				_reconnecting = false
 		SocketIOPacketType.CONNECT_ERROR:
-			on_connect.emit(data, name_space, true)
+			if not _reconnecting:
+				on_connect.emit(data, name_space, true)
+			else:
+				_reconnecting = false
 		SocketIOPacketType.EVENT:
 			if typeof(data) != TYPE_ARRAY:
 				push_error("Invalid socketio event format!")
