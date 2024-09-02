@@ -43,6 +43,17 @@ signal on_disconnect(name_space: String)
 # triggered when socket.io event is received
 signal on_event(event_name: String, payload: Variant, name_space: String)
 
+# triggered when lost connection in not-clean way (i.e. service shut down)
+# and now trying to reconnect. When re-connects successfully,
+# the on_reconnected signal is emitted, instead of on_connect
+signal on_connection_lost
+
+# triggered when connects again after losing connection
+# it's alternative to on_connect signal, but only emitted
+# after automatically re-connecting with socket.io server
+signal on_reconnected(payload: Variant, name_space: String, error: bool)
+
+
 func _init(url: String, auth: Variant=null):
 	_auth = auth
 	url = _preprocess_url(url)
@@ -89,6 +100,8 @@ func _process(_delta):
 			timer.timeout.connect(_on_reconnect_timer_timeout.bind(timer))
 			timer.autostart = true
 			add_child(timer)
+
+			on_connection_lost.emit()
 		else:
 			on_engine_disconnected.emit(code, reason)
 
@@ -165,15 +178,17 @@ func _socketio_parse_packet(payload: String):
 
 	match packetType:
 		SocketIOPacketType.CONNECT:
-			if not _reconnecting:
+			if _reconnecting:
+				_reconnecting = false
+				on_reconnected.emit(data, name_space, false)
+			else:
 				on_connect.emit(data, name_space, false)
-			else:
-				_reconnecting = false
 		SocketIOPacketType.CONNECT_ERROR:
-			if not _reconnecting:
-				on_connect.emit(data, name_space, true)
-			else:
+			if _reconnecting:
 				_reconnecting = false
+				on_reconnected.emit(data, name_space, true)
+			else:
+				on_connect.emit(data, name_space, true)
 		SocketIOPacketType.EVENT:
 			if typeof(data) != TYPE_ARRAY:
 				push_error("Invalid socketio event format!")
