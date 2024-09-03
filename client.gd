@@ -20,13 +20,20 @@ enum SocketIOPacketType {
 	BINARY_ACK = 6,
 }
 
+enum ConnectionState {
+	DISCONNECTED,
+	CONNECTED,
+	RECONNECTING,
+}
+
 var _url: String
 var _client: WebSocketPeer = WebSocketPeer.new()
 var _sid: String
 var _pingTimeout: int = 0
 var _pingInterval: int = 0
-var _connected: bool = false
 var _auth: Variant = null
+var _connection_state: ConnectionState = ConnectionState.DISCONNECTED
+var _reconnect_timer: Timer = null
 
 # triggered when engine.io connection is established
 signal on_engine_connected(sid: String)
@@ -41,6 +48,17 @@ signal on_connect(payload: Variant, name_space: String, error: bool)
 signal on_disconnect(name_space: String)
 # triggered when socket.io event is received
 signal on_event(event_name: String, payload: Variant, name_space: String)
+
+# triggered when lost connection in not-clean way (i.e. service shut down)
+# and now trying to reconnect. When re-connects successfully,
+# the on_reconnected signal is emitted, instead of on_connect
+signal on_connection_lost
+
+# triggered when connects again after losing connection
+# it's alternative to on_connect signal, but only emitted
+# after automatically re-connecting with socket.io server
+signal on_reconnected(payload: Variant, name_space: String, error: bool)
+
 
 func _init(url: String, auth: Variant=null):
 	_auth = auth
@@ -72,14 +90,41 @@ func _process(_delta):
 			# TODO: handle binary data?
 
 	elif state == WebSocketPeer.STATE_CLOSED:
-		var code = _client.get_close_code()
-		var reason = _client.get_close_reason()
-		on_engine_disconnected.emit(code, reason)
-		_connected = false
 		set_process(false)
 
+		var code = _client.get_close_code()
+		var reason = _client.get_close_reason()
+
+		if code == -1:
+			# -1 is not-clean disconnect (i.e. Service shut down)
+			# we should try to reconnect
+
+			_connection_state = ConnectionState.RECONNECTING
+
+			_reconnect_timer = Timer.new()
+			_reconnect_timer.wait_time = 1.0
+			_reconnect_timer.timeout.connect(_on_reconnect_timer_timeout)
+			_reconnect_timer.autostart = true
+			add_child(_reconnect_timer)
+
+			on_connection_lost.emit()
+		else:
+			_connection_state = ConnectionState.DISCONNECTED
+			on_engine_disconnected.emit(code, reason)
+
+func _on_reconnect_timer_timeout():
+	_client.poll()
+	var state = _client.get_ready_state()
+	if state == WebSocketPeer.STATE_CLOSED:
+		_client.connect_to_url(_url)
+	else:
+		set_process(true)
+		_reconnect_timer.queue_free()
+
 func _exit_tree():
-	_engineio_send_packet(EngineIOPacketType.close)
+	if _connection_state == ConnectionState.CONNECTED:
+		_engineio_send_packet(EngineIOPacketType.close)
+
 	_client.close()
 
 func _engineio_decode_packet(packet: String):
@@ -94,7 +139,6 @@ func _engineio_decode_packet(packet: String):
 			_pingTimeout = int(json.data["pingTimeout"])
 			_pingInterval = int(json.data["pingInterval"])
 			on_engine_connected.emit(_sid)
-			_connected = true
 
 		EngineIOPacketType.ping:
 			_engineio_send_packet(EngineIOPacketType.pong)
@@ -142,9 +186,21 @@ func _socketio_parse_packet(payload: String):
 
 	match packetType:
 		SocketIOPacketType.CONNECT:
-			on_connect.emit(data, name_space, false)
+			if _connection_state == ConnectionState.RECONNECTING:
+				_connection_state = ConnectionState.CONNECTED
+				on_reconnected.emit(data, name_space, false)
+			else:
+				_connection_state = ConnectionState.CONNECTED
+				on_connect.emit(data, name_space, false)
+
 		SocketIOPacketType.CONNECT_ERROR:
-			on_connect.emit(data, name_space, true)
+			if _connection_state == ConnectionState.RECONNECTING:
+				_connection_state = ConnectionState.CONNECTED
+				on_reconnected.emit(data, name_space, true)
+			else:
+				_connection_state = ConnectionState.CONNECTED
+				on_connect.emit(data, name_space, true)
+
 		SocketIOPacketType.EVENT:
 			if typeof(data) != TYPE_ARRAY:
 				push_error("Invalid socketio event format!")
@@ -174,7 +230,10 @@ func socketio_connect(name_space: String="/"):
 
 # disconnect from socket.io server by namespace
 func socketio_disconnect(name_space: String="/"):
-	_socketio_send_packet(SocketIOPacketType.DISCONNECT, name_space)
+	if _connection_state == ConnectionState.CONNECTED:
+		# We should ONLY send disconnect packet when we're connected
+		_socketio_send_packet(SocketIOPacketType.DISCONNECT, name_space)
+
 	on_disconnect.emit(name_space)
 
 # send event to socket.io server by namespace
@@ -183,3 +242,6 @@ func socketio_send(event_name: String, payload: Variant=null, name_space: String
 		_socketio_send_packet(SocketIOPacketType.EVENT, name_space, [event_name])
 	else:
 		_socketio_send_packet(SocketIOPacketType.EVENT, name_space, [event_name, payload])
+
+func get_connection_state() -> ConnectionState:
+	return _connection_state
