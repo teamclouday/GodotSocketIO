@@ -243,5 +243,17 @@ func socketio_send(event_name: String, payload: Variant=null, name_space: String
 	else:
 		_socketio_send_packet(SocketIOPacketType.EVENT, name_space, [event_name, payload])
 
+# send binary data to socket.io server by namespace
+func socketio_send_binary(event_name: String, payload: PackedByteArray, name_space: String = "/"):
+	socketio_send_multiple_binary(event_name, [payload], name_space)
+
+# send multiple binary data to socket.io server by namespace
+func socketio_send_multiple_binary(event_name: String, payloads: Array[PackedByteArray], name_space: String = "/"):
+	var data = [event_name]
+	for i in range(payloads.size()):
+		data.append({"_placeholder": true, "num": i})
+
+	_socketio_send_packet(SocketIOPacketType.BINARY_EVENT, name_space, data, payloads)
+
 func get_connection_state() -> ConnectionState:
 	return _connection_state

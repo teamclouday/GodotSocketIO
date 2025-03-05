@@ -40,3 +40,9 @@ func on_socket_event(event_name: String, payload: Variant, _name_space):
 	print("Received ", event_name, " ", payload)
 	# respond hello world
 	client.socketio_send("hello", "world")
+
+	var binary_content: PackedByteArray = "file content or other".to_utf8_buffer()
+	client.socketio_send_binary("upload", binary_content)
+
+	# Multiple
+	client.socketio_send_multiple_binary("upload", [binary_content, binary_content])
